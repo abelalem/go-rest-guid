@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"regexp"
 
 	"github.com/abelalem/go-rest-guid/pkg/recipes"
+	"github.com/gosimple/slug"
 )
 
 type homeHandler struct{}
@@ -68,11 +70,119 @@ func (h *RecipesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *RecipesHandler) CreateRecipe(w http.ResponseWriter, r *http.Request) {}
-func (h *RecipesHandler) ListRecipes(w http.ResponseWriter, r *http.Request)  {}
-func (h *RecipesHandler) GetRecipe(w http.ResponseWriter, r *http.Request)    {}
-func (h *RecipesHandler) UpdateRecipe(w http.ResponseWriter, r *http.Request) {}
-func (h *RecipesHandler) DeleteRecipe(w http.ResponseWriter, r *http.Request) {}
+func (h *RecipesHandler) CreateRecipe(w http.ResponseWriter, r *http.Request) {
+	//Recipe object that will be populated from JSON payload
+	var recipe recipes.Recipe
+	if err := json.NewDecoder(r.Body).Decode(&recipe); err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	// Convert the name of the recipe into URL friendly string
+	resourceID := slug.Make(recipe.Name)
+
+	// Call the store to add the recipe
+	if err := h.store.Add(resourceID, recipe); err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	// Set the status code to 200
+	w.WriteHeader(http.StatusOK)
+}
+func (h *RecipesHandler) ListRecipes(w http.ResponseWriter, r *http.Request) {
+	resources, err := h.store.List()
+
+	if err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	jsonBytes, err := json.Marshal(resources)
+
+	if err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes)
+}
+func (h *RecipesHandler) GetRecipe(w http.ResponseWriter, r *http.Request) {
+	// Extract the resource ID/slug using a regex
+	matches := RecipeRequestWithID.FindStringSubmatch(r.URL.Path)
+
+	// Expect matches to be length >= 2 (full string + 1 matching group)
+	if len(matches) < 2 {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	// Retrieve recipe from the store
+	recipe, err := h.store.Get(matches[1])
+	if err != nil {
+		// Special case of NotFound Error
+		if err == recipes.NotFoundErr {
+			NotFoundHandler(w, r)
+			return
+		}
+
+		// Every other error
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	// Convert the struct into JSON payload
+	jsonBytes, err := json.Marshal(recipe)
+	if err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	// Write the result
+	w.WriteHeader(http.StatusOK)
+	w.Write(jsonBytes)
+}
+func (h *RecipesHandler) UpdateRecipe(w http.ResponseWriter, r *http.Request) {
+	matches := RecipeRequestWithID.FindStringSubmatch(r.URL.Path)
+	if len(matches) < 2 {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	// Recipes object that will be populated from JSON payload
+	var recipe recipes.Recipe
+	if err := json.NewDecoder(r.Body).Decode(&recipe); err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	if err := h.store.Update(matches[1], recipe); err != nil {
+		if err == recipes.NotFoundErr {
+			NotFoundHandler(w, r)
+			return
+		}
+
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
+func (h *RecipesHandler) DeleteRecipe(w http.ResponseWriter, r *http.Request) {
+	matches := RecipeRequestWithID.FindStringSubmatch(r.URL.Path)
+	if len(matches) < 2 {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	if err := h.store.Remove(matches[1]); err != nil {
+		InternalServerErrorHandler(w, r)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+}
 
 func main() {
 
