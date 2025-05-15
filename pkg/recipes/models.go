@@ -7,6 +7,6 @@ type Ingredient struct {
 
 // Represents a recipe
 type Recipe struct {
-	Name string `json:"name"`
-	Ingredients []Ingredient `json:"name"`
+	Name        string       `json:"name"`
+	Ingredients []Ingredient `json:"ingredients"`
 }

@@ -66,6 +66,7 @@ func (h *RecipesHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.DeleteRecipe(w, r)
 		return
 	default:
+		NotFoundHandler(w, r)
 		return
 	}
 }
