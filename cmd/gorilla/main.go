@@ -37,10 +37,18 @@ type RecipesHandler struct {
 	store recipeStore
 }
 
-func NewRecipesHandler(s recipeStore) *RecipesHandler {
-	return &RecipesHandler{
+func NewRecipesHandler(s recipeStore, router *mux.Router) *RecipesHandler {
+	handler := &RecipesHandler{
 		store: s,
 	}
+
+	router.HandleFunc("/", handler.ListRecipes).Methods("GET")
+	router.HandleFunc("/", handler.CreateRecipe).Methods("POST")
+	router.HandleFunc("/{id}", handler.GetRecipe).Methods("GET")
+	router.HandleFunc("/{id}", handler.UpdateRecipe).Methods("PUT")
+	router.HandleFunc("/{id}", handler.DeleteRecipe).Methods("DELETE")
+
+	return handler
 }
 
 func (h RecipesHandler) CreateRecipe(rw http.ResponseWriter, r *http.Request) {
@@ -138,7 +146,6 @@ func (h RecipesHandler) DeleteRecipe(rw http.ResponseWriter, r *http.Request) {
 func main() {
 	// Create the store and Recipe Handler
 	store := recipes.NewMemStore()
-	recipesHandler := NewRecipesHandler(store)
 	home := homeHandler{}
 
 	// Create the router
@@ -146,11 +153,11 @@ func main() {
 
 	// Register the routes
 	router.HandleFunc("/", home.ServeHTTP).Methods("GET")
-	router.HandleFunc("/recipes", recipesHandler.ListRecipes).Methods("GET")
-	router.HandleFunc("/recipes", recipesHandler.CreateRecipe).Methods("POST")
-	router.HandleFunc("/recipes/{id}", recipesHandler.GetRecipe).Methods("GET")
-	router.HandleFunc("/recipes/{id}", recipesHandler.UpdateRecipe).Methods("PUT")
-	router.HandleFunc("/recipes/{id}", recipesHandler.DeleteRecipe).Methods("DELETE")
+
+	// Define all the routers/the subrouter
+	subrouter := router.PathPrefix("/recipes").Subrouter()
+
+	NewRecipesHandler(store, subrouter)
 
 	// Start the server
 	http.ListenAndServe(":8010", router)
